@@ -1,69 +1,88 @@
-# Load packages
-library(dplyr)
-library(ggplot2)
-library(stringr)
-library(readr)
 
-# Load dataset
-movies <- read_csv("./data/tmdb_5000_movies.csv")
+# Load Packages
+options(repos = c(CRAN = "https://cloud.r-project.org"))
 
-# Data cleaning, filtering out the invalid data
+pkgs <- c("quantmod", "dplyr", "tidyr", "ggplot2", "lubridate", "scales")
+invisible(lapply(pkgs, function(p){
+  if(!requireNamespace(p, quietly = TRUE)) install.packages(p)
+  library(p, character.only = TRUE)
+}))
 
-movies_clean <- movies %>%
-  filter(budget > 0,
-         revenue > 0,
-         vote_average > 0,
-         runtime > 0)
+#Create needed folders
+if(!dir.exists("plots")) dir.create("plots")
+if(!dir.exists("data")) dir.create("data")
 
-# Extract genre (first genre name)
-movies_clean <- movies_clean %>%
-  mutate(genre = str_extract(genres, "(?<=name\": \")[A-Za-z]+"))
+# Download Data
+symbols <- c("AAPL", "TSLA", "MSFT")
 
+get_stock <- function(sym) {
+  xt <- quantmod::getSymbols(sym, src="yahoo", auto.assign = FALSE)
+  price <- Cl(xt)
+  ret <- dailyReturn(price)
 
-# 1. Scatter Plot: Budget vs Revenue
-
-p1 <- ggplot(movies_clean, aes(x = budget, y = revenue)) +
-  geom_point(alpha = 0.3) +
-  scale_x_log10() +
-  scale_y_log10() +
-  geom_smooth(method = "lm", color = "red") +
-  labs(
-    title = "Budget vs Revenue",
-    x = "Budget (log scale)",
-    y = "Revenue (log scale)"
+  tibble(
+    date   = as.Date(index(price)),
+    symbol = sym,
+    close  = as.numeric(price),
+    ret    = as.numeric(ret)
   )
+}
 
-ggsave("./plots/scatter_budget_revenue.png", p1, width = 7, height = 5)
+df <- bind_rows(lapply(symbols, get_stock)) %>%
+  arrange(symbol, date)
 
+# Cumulative Return
+df_cum <- df %>%
+  group_by(symbol) %>%
+  arrange(date, .by_group = TRUE) %>%
+  mutate(cumret = cumprod(1 + replace_na(ret, 0)))
 
-# 2. Boxplot: Rating by Genre
+# Monthly Return
+df_monthly <- df %>%
+  mutate(month = floor_date(date, "month")) %>%
+  group_by(symbol, month) %>%
+  summarize(monthly_ret = prod(1 + ret, na.rm = TRUE) - 1,
+            .groups = "drop")
 
-movies_genre <- movies_clean %>%
-  filter(!is.na(genre))
+# Plot 1: Closing Price
+p_price <- df %>%
+  ggplot(aes(date, close, color = symbol)) +
+  geom_line(linewidth = 0.8) +
+  labs(title="Closing Price Over Time",
+       x="Date", y="Price (USD)") +
+  theme_minimal()
 
-p2 <- ggplot(movies_genre, aes(x = genre, y = vote_average, fill = genre)) +
-  geom_boxplot() +
-  coord_flip() +
-  labs(
-    title = "Movie Ratings by Genre",
-    x = "Genre",
-    y = "Average Rating"
-  ) +
-  theme(legend.position = "none")
+ggsave("plots/closing_price.png", p_price, width=8, height=5, dpi=300)
 
-ggsave("./plots/boxplot_genre_rating.png", p2, width = 7, height = 5)
+# Plot 2: Cumulative Returns
+p_cum <- df_cum %>%
+  ggplot(aes(date, cumret, color=symbol)) +
+  geom_line(linewidth = 0.8) +
+  labs(title="Cumulative Return (Growth of $1)",
+       x="Date", y="Cumulative Value") +
+  theme_minimal()
 
+ggsave("plots/cumulative_returns.png", p_cum, width=8, height=5, dpi=300)
 
-# 3. Scatter Plot: Runtime vs Rating
+# Plot 3: Distribution of Daily Returns
+p_hist <- df %>%
+  ggplot(aes(ret, fill=symbol)) +
+  geom_histogram(alpha=0.6, bins=50, position="identity") +
+  labs(title="Distribution of Daily Returns",
+       x="Daily Return", y="Frequency") +
+  scale_x_continuous(labels = percent_format(accuracy=0.1)) +
+  theme_minimal()
 
-p4 <- ggplot(movies_clean, aes(x = runtime, y = vote_average)) +
-  geom_point(alpha = 0.3) +
-  geom_smooth(method = "lm", color = "blue") +
-  labs(
-    title = "Runtime vs Movie Rating",
-    x = "Runtime (minutes)",
-    y = "Movie Rating"
-  )
+ggsave("plots/daily_return_hist.png", p_hist, width=8, height=5, dpi=300)
 
-ggsave("./plots/scatter_runtime_rating.png", p4, width = 7, height = 5)
+# Plot 4: Monthly Returns
+p_month <- df_monthly %>%
+  ggplot(aes(month, monthly_ret, color=symbol)) +
+  geom_line(linewidth=0.9) +
+  labs(title="Monthly Returns",
+       x="Month", y="Monthly Return") +
+  scale_y_continuous(labels = percent_format(accuracy = 1)) +
+  theme_minimal()
+
+ggsave("plots/monthly_returns.png", p_month, width=8, height=5, dpi=300)
 
