@@ -44,17 +44,9 @@ df_monthly <- df %>%
   summarize(monthly_ret = prod(1 + ret, na.rm = TRUE) - 1,
             .groups = "drop")
 
-# Plot 1: Closing Price
-p_price <- df %>%
-  ggplot(aes(date, close, color = symbol)) +
-  geom_line(linewidth = 0.8) +
-  labs(title="Closing Price Over Time",
-       x="Date", y="Price (USD)") +
-  theme_minimal()
 
-ggsave("plots/closing_price.png", p_price, width=8, height=5, dpi=300)
 
-# Plot 2: Cumulative Returns
+# Plot: Cumulative Returns
 p_cum <- df_cum %>%
   ggplot(aes(date, cumret, color=symbol)) +
   geom_line(linewidth = 0.8) +
@@ -64,18 +56,8 @@ p_cum <- df_cum %>%
 
 ggsave("plots/cumulative_returns.png", p_cum, width=8, height=5, dpi=300)
 
-# Plot 3: Distribution of Daily Returns
-p_hist <- df %>%
-  ggplot(aes(ret, fill=symbol)) +
-  geom_histogram(alpha=0.6, bins=50, position="identity") +
-  labs(title="Distribution of Daily Returns",
-       x="Daily Return", y="Frequency") +
-  scale_x_continuous(labels = percent_format(accuracy=0.1)) +
-  theme_minimal()
 
-ggsave("plots/daily_return_hist.png", p_hist, width=8, height=5, dpi=300)
-
-# Plot 4: Monthly Returns
+# Plot: Monthly Returns
 p_month <- df_monthly %>%
   ggplot(aes(month, monthly_ret, color=symbol)) +
   geom_line(linewidth=0.9) +
