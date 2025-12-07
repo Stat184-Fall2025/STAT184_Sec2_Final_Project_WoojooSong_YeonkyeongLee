@@ -1,0 +1,400 @@
+---
+title: "STAT 184 Final Project: Stock Return Analysis"
+author: 
+  - "Woojoo Song"
+  - "Yeonkyeong Lee"
+date: "December 6, 2025"
+format:
+  pdf:
+    toc: true
+    number-sections: true
+    tbl-tools:
+      longtable: true
+execute: 
+  echo: false
+  warning: false
+  message: false
+
+---
+
+# Introduction
+
+This project demonstrates our team's Exploratory Data Analysis (EDA) skills using financial time-series data from Yahoo Finance.  
+We examine three major U.S. technology stocks:
+
+- Apple (AAPL)  
+- Tesla (TSLA)  
+- Microsoft (MSFT)
+
+We created two derived variables to better understand performance:
+
+- **Cumulative Returns** — how \$1 grows over time  
+- **Monthly Returns** — short-term fluctuations  
+
+These metrics allow us to explore long-term growth and medium-term volatility.
+
+All results, plots, and processed data tables are included below.
+
+
+```{r}
+# Load Packages
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+
+library(quantmod)
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+
+# Create folders
+
+# Download Data
+symbols <- c("AAPL", "TSLA", "MSFT")
+all_data <- data.frame()
+
+for (sym in symbols) {
+  stock <- getSymbols(sym, src = "yahoo", auto.assign = FALSE)
+  price <- Cl(stock)
+  ret <- dailyReturn(price)
+
+  temp <- data.frame(
+    date = as.Date(index(price)),
+    symbol = sym,
+    close = as.numeric(price),
+    ret = as.numeric(ret)
+  )
+
+  all_data <- rbind(all_data, temp)
+}
+
+# Sort data
+all_data <- all_data %>%
+  arrange(symbol, date) %>%
+  mutate(ret = ifelse(is.na(ret), 0, ret))
+
+# Cumulative Return
+df_cum <- all_data %>%
+  group_by(symbol) %>%
+  mutate(ret = ifelse(is.na(ret), 0, ret),cumret = cumprod(1 + ret))
+
+# Monthly Return
+all_data$month <- floor_date(all_data$date, "month")
+
+df_month <- all_data %>%
+  mutate(month = floor_date(date, "month")) %>%
+  group_by(symbol, month) %>%
+  summarise(
+    monthly_ret = prod(1 + ret, na.rm = TRUE) - 1,
+    .groups = 'drop'
+  )
+# Plot: Cumulative Returns
+p_cum <- ggplot(df_cum, aes(x = date, y = cumret, color = symbol)) +
+  geom_line(linewidth = 1) +
+  scale_y_continuous(labels = scales::dollar_format()) +
+  labs(title = "Cumulative Return (Growth of $1)", x = "Date", y = "Cumulative Value") +
+  theme_minimal() +
+  theme(legend.title = element_blank())
+
+
+# Plot: Monthly Returns
+p_month <- ggplot(df_month, aes(x = month, y = monthly_ret, fill = symbol)) + # color 대신 fill 사용 권장
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(title = "Monthly Returns", x = "Month", y = "Monthly Return (%)") +
+  theme_minimal() +
+  theme(legend.title = element_blank())
+
+
+```
+# Data Provenance
+
+The data come from **Yahoo Finance**, accessed via the `quantmod::getSymbols()` function.
+
+**Who collected the data?** Yahoo aggregates market data from U.S. stock exchanges.
+
+**What are the data?** Daily closing prices for AAPL, TSLA, and MSFT.
+
+**When?** Downloaded at runtime using R.
+
+**Where?** Public stock exchanges $\rightarrow$ Yahoo Finance $\rightarrow$ R via quantmod.
+
+**Why?** For investor transparency and historical analysis.
+
+**How?** Yahoo receives data feeds directly from exchanges.
+
+# FAIR & CARE Evaluation
+
+## FAIR
+- **Findable:** identified via ticker symbols  
+- **Accessible:** public API via quantmod  
+- **Interoperable:** numeric tabular format  
+- **Reusable:** saved as cleaned `.csv` files  
+
+## CARE
+Since the data involve *corporations*, not *human subjects*, CARE considerations are minimal.
+
+# Data Description
+
+Three datasets were generated for this report:
+
+## **1. daily_prices.csv** Contains the raw daily prices and daily returns.  
+Columns:
+
+| Column | Meaning |
+|--------|---------|
+| date | Trading day |
+| symbol | Stock ticker |
+| close | Closing price |
+| ret | Daily return |
+
+## **2. cumulative_returns.csv** Adds cumulative return per symbol.  
+Columns:
+
+| Column | Meaning |
+|--------|---------|
+| date | Trading day |
+| symbol | Stock |
+| close | Closing price |
+| ret | Daily return |
+| cumret | Cumulative growth of \$1 |
+
+## **3. monthly_returns.csv** Stores aggregated monthly returns.  
+Columns:
+
+| Column | Meaning |
+|--------|---------|
+| month | First day of month |
+| symbol | Stock |
+| monthly_ret | Total monthly return |
+
+We include summary tables of these processed datasets below.
+
+# Exploratory Data Analysis
+
+## Daily Prices Table (First 10 rows)
+### Apple
+```{r}
+#| label: tbl-daily-aapl
+#| tbl-cap: "AAPL Daily Prices and Returns (First 10 Trading Days)"
+all_data %>% 
+  filter(symbol == "AAPL") %>% 
+  head(10) %>% knitr::kable()
+```
+
+### Microsoft
+```{r}
+#| label: tbl-daily-msft
+#| tbl-cap: "MSFT Daily Prices and Returns (First 10 Trading Days)"
+all_data %>% 
+  filter(symbol == "MSFT") %>% 
+  head(10)%>% knitr::kable()
+```
+
+### Tesla
+```{r}
+#| label: tbl-daily-tsla
+#| tbl-cap: "TSLA Daily Prices and Returns (First 10 Trading Days)"
+all_data %>% 
+  filter(symbol == "TSLA") %>% 
+  head(10) %>% knitr::kable()
+```
+
+## Cumulative Returns Table (First 10 rows)
+### Apple
+```{r}
+#| label: tbl-cum-aapl
+#| tbl-cap: "AAPL Cumulative Returns (First 10 Trading Days)"
+df_cum %>% 
+  filter(symbol == "AAPL") %>% 
+  head(10) %>% knitr::kable()
+```
+
+### Microsoft
+```{r}
+#| label: tbl-cum-msft
+#| tbl-cap: "MSFT Cumulative Returns (First 10 Trading Days)"
+df_cum %>% 
+  filter(symbol == "MSFT") %>% 
+  head(10) %>% knitr::kable()
+```
+
+### Tesla
+```{r}
+#| label: tbl-cum-tsla
+#| tbl-cap: "TSLA Cumulative Returns (First 10 Trading Days)"
+df_cum %>% 
+  filter(symbol == "TSLA") %>% 
+  head(10) %>% knitr::kable()
+``` 
+
+## Monthly Returns Table (First 10 rows)
+### Apple
+```{r}
+#| label: tbl-month-aapl
+#| tbl-cap: "AAPL Monthly Returns (First 10 Months)"
+df_month %>% 
+  filter(symbol == "AAPL") %>% 
+  head(10) %>% knitr::kable()
+```
+
+### Microsoft
+```{r}
+#| label: tbl-month-msft
+#| tbl-cap: "MSFT Monthly Returns (First 10 Months)"
+df_month %>% 
+  filter(symbol == "MSFT") %>% 
+  head(10) %>% knitr::kable()
+```
+
+### Tesla
+```{r}
+#| label: tbl-month-tsla
+#| tbl-cap: "TSLA Monthly Returns (First 10 Months)"
+df_month %>% 
+  filter(symbol == "TSLA") %>% 
+  head(10) %>% knitr::kable()
+```
+
+## Cumulative Return Plot
+
+```{r}
+#| label: fig-cum
+#| fig-cap: "Cumulative Return Curves for AAPL, TSLA, and MSFT (Growth of $1)"
+#| fig-alt: "Line plot showing the cumulative growth of $1 invested in AAPL, TSLA, and MSFT. The TSLA line shows the highest and most volatile growth."
+#| fig-pos: "H"
+
+p_cum
+```
+
+## Monthly Return Plot
+```{r}
+#| label: fig-month
+#| fig-cap: "Monthly Returns (Percentage) for AAPL, TSLA, and MSFT"
+#| fig-alt: "Bar chart showing monthly percentage returns for the three stocks. TSLA consistently shows the largest positive and negative monthly fluctuations."
+#| fig-pos: "H"
+
+p_month
+```
+
+## Discussion/Data Story
+By examining both long-term and monthly performance:
+
+- Tesla is the most volatile stock in both cumulative and monthly perspectives.
+
+- Apple and Microsoft show more stable, predictable growth.
+
+- Monthly returns highlight short-term risk, while cumulative returns show long-term compounding patterns.
+
+This combination reveals how investor risk profiles align with different stocks.
+
+## Open Science & Reproducibility
+We ensured reproducibility by:
+
+- Using publicly accessible data
+
+- Including all processed .csv files
+
+- Saving plots to /plots
+
+- Providing a complete Code Appendix
+
+- Following Tidyverse/BOAST style guide
+
+- Using GitHub
+
+## Author Contributions
+- Woojoo Song: Data wrangling, plotting, report editing
+
+- Yeonkyeong Lee: Presentation design, FAIR/CARE evaluation, scriptwriting
+
+## References
+Yahoo Finance. (2025). Historical Stock Data. https://finance.yahoo.com/
+
+## Code Appendix
+```{r code-appendix, eval = FALSE, echo = TRUE}
+
+# Load Packages
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+install.packages("quantmod")
+install.packages("dplyr")
+install.packages("ggplot2")
+install.packages("lubridate")
+
+library(quantmod)
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+
+# Create folders
+if (!dir.exists("plots")) {
+  dir.create("plots")
+}
+if (!dir.exists("data")) {
+  dir.create("data")
+}
+
+# Download Data
+symbols <- c("AAPL", "TSLA", "MSFT")
+all_data <- data.frame()
+
+for (sym in symbols) {
+  stock <- getSymbols(sym, src = "yahoo", auto.assign = FALSE)
+  price <- Cl(stock)
+  ret <- dailyReturn(price)
+
+  temp <- data.frame(
+    date = as.Date(index(price)),
+    symbol = sym,
+    close = as.numeric(price),
+    ret = as.numeric(ret)
+  )
+
+  all_data <- rbind(all_data, temp)
+}
+
+# Sort data
+all_data <- all_data %>%
+  arrange(symbol, date) %>%
+  mutate(ret = ifelse(is.na(ret), 0, ret))
+
+# Cumulative Return
+df_cum <- all_data %>%
+  group_by(symbol) %>%
+  mutate(ret = ifelse(is.na(ret), 0, ret),cumret = cumprod(1 + ret))
+
+# Monthly Return
+all_data$month <- floor_date(all_data$date, "month")
+
+df_month <- all_data %>%
+  mutate(month = floor_date(date, "month")) %>%
+  group_by(symbol, month) %>%
+  summarise(
+    monthly_ret = prod(1 + ret, na.rm = TRUE) - 1,
+    .groups = 'drop'
+  )
+# Plot: Cumulative Returns
+p_cum <- ggplot(df_cum, aes(x = date, y = cumret, color = symbol)) +
+  geom_line(linewidth = 1) +
+  scale_y_continuous(labels = scales::dollar_format()) +
+  labs(title = "Cumulative Return (Growth of $1)", x = "Date", y = "Cumulative Value") +
+  theme_minimal() +
+  theme(legend.title = element_blank())
+
+ggsave("plots/cumulative_returns.png", p_cum, width = 8, height = 5)
+
+# Plot: Monthly Returns
+p_month <- ggplot(df_month, aes(x = month, y = monthly_ret, fill = symbol)) + # color 대신 fill 사용 권장
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(title = "Monthly Returns", x = "Month", y = "Monthly Return (%)") +
+  theme_minimal() +
+  theme(legend.title = element_blank())
+
+ggsave("plots/monthly_returns.png", p_month, width = 8, height = 5)
+
+# Save data
+write.csv(all_data, "data/daily_prices.csv", row.names = FALSE)
+write.csv(df_cum, "data/cumulative_returns.csv", row.names = FALSE)
+write.csv(df_month, "data/monthly_returns.csv", row.names = FALSE)
+
+
+```
